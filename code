@@ -1,1 +1,47 @@
-codes
+import cv2
+import numpy as np
+
+# Open a connection to the camera (0 is usually the built-in webcam, change if you have multiple cameras)
+cap = cv2.VideoCapture(0)
+
+if not cap.isOpened():
+    print("Error: Could not open camera.")
+else:
+    print("Press 'q' to exit the video stream.")
+
+while True:
+    # Capture frame-by-frame
+    ret, frame = cap.read()
+
+    if not ret:
+        print("Error: Failed to capture image.")
+        break
+
+    # Convert the frame to HSV color space
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Define range of blue color in HSV
+    lower_blue = np.array([90, 50, 50])
+    upper_blue = np.array([130, 255, 255])
+
+    # Create a mask that extracts the blue regions
+    mask = cv2.inRange(hsv, lower_blue, upper_blue)
+
+    # Bitwise-AND mask and original image to highlight blue regions
+    blue_highlighted = cv2.bitwise_and(frame, frame, mask=mask)
+
+    # Display the original frame
+    cv2.imshow('Original Frame', frame)
+
+    # Display the frame with blue color highlighted
+    cv2.imshow('Blue Color Detection', blue_highlighted)
+
+    # Break the loop on 'q' key press
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release the capture and close windows
+cap.release()
+cv2.destroyAllWindows()
+
+
