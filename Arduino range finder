@@ -1,0 +1,20 @@
+#include <Wire.h>
+#include <LIDARLite.h>
+
+LIDARLite lidarLite;
+
+void setup() {
+  Serial.begin(9600);
+  delay(1000); // Allow time for Serial to initialize
+
+  lidarLite.begin(); // Initialize LIDAR-Lite, adjust based on your library
+  Serial.println("LIDAR-Lite initialized successfully.");
+}
+
+void loop() {
+  int distance = lidarLite.distance(); // Read distance from LIDAR-Lite
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+  delay(500); // Delay between readings
+}
