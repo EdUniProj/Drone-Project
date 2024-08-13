@@ -1,0 +1,78 @@
+import cv2
+import numpy as np
+
+# Define the HSV color ranges for red, blue, and green
+color_ranges = {
+    "red": ([0, 120, 70], [10, 255, 255]),
+    "red2": ([170, 120, 70], [180, 255, 255]),  # Second range for red
+    "blue": ([100, 150, 50], [140, 255, 255]),
+    "green": ([40, 70, 50], [80, 255, 255]),
+}
+
+# BGR colors for drawing (Blue, Green, Red)
+drawing_colors = {
+    "red": (0, 0, 255),
+    "blue": (255, 0, 0),
+    "green": (0, 255, 0),
+}
+
+# Start video capture from the laptop camera
+cap = cv2.VideoCapture(0)
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Failed to grab frame")
+        break
+
+    # Convert the frame to HSV color space
+    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    for color_name, (lower, upper) in color_ranges.items():
+        # Create a mask for the color
+        lower_bound = np.array(lower, dtype="uint8")
+        upper_bound = np.array(upper, dtype="uint8")
+        mask = cv2.inRange(hsv_frame, lower_bound, upper_bound)
+
+        # If handling red, combine the two red ranges
+        if color_name == "red":
+            lower_bound2 = np.array(color_ranges["red2"][0], dtype="uint8")
+            upper_bound2 = np.array(color_ranges["red2"][1], dtype="uint8")
+            mask2 = cv2.inRange(hsv_frame, lower_bound2, upper_bound2)
+            mask = cv2.bitwise_or(mask, mask2)
+
+        # Perform morphological operations to clean up the mask
+        mask = cv2.erode(mask, None, iterations=2)
+        mask = cv2.dilate(mask, None, iterations=2)
+
+        # Find contours in the mask
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        for contour in contours:
+            # Calculate the area of the contour
+            area = cv2.contourArea(contour)
+            if area > 500:  # Filter out small areas
+                # Find the centroid of the contour
+                M = cv2.moments(contour)
+                if M["m00"] != 0:
+                    cx = int(M["m10"] / M["m00"])
+                    cy = int(M["m01"] / M["m00"])
+
+                    # Draw the contour and centroid on the frame
+                    cv2.drawContours(frame, [contour], -1, drawing_colors[color_name], 2)
+                    cv2.circle(frame, (cx, cy), 7, drawing_colors[color_name], -1)
+                    cv2.putText(frame, f"{color_name} centroid", (cx - 20, cy - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
+                    # Print the centroid coordinates
+                    print(f"{color_name} centroid coordinates: ({cx}, {cy})")
+
+    # Show the frame with detected objects in one window
+    cv2.imshow('Frame', frame)
+
+    # Exit the loop when 'q' is pressed
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release the camera and close all windows
+cap.release()
+cv2.destroyAllWindows()
