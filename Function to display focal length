@@ -1,0 +1,11 @@
+import numpy as np
+
+# Load the calibration data
+data = np.load('D:/camera_calibration.npz')
+
+# Extract the camera matrix
+mtx = data['mtx']
+
+# Extract the focal length
+focal_length = mtx[0, 0]
+print("Focal Length (in pixels):", focal_length)
