@@ -1,0 +1,81 @@
+import cv2
+import numpy as np
+import os
+
+# Termination criteria for refining corner detection
+criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)q
+
+# Prepare object points, like (0,0,0), (1,0,0), (2,0,0), ..., (7,5,0)
+objp = np.zeros((6*8, 3), np.float32)
+objp[:, :2] = np.mgrid[0:8, 0:6].T.reshape(-1, 2)
+
+# Arrays to store object points and image points from all the images
+objpoints = []  # 3D points in real-world space
+imgpoints = []  # 2D points in image plane
+
+# Initialize the camera
+cap = cv2.VideoCapture(1)  # Use 0 for the default camera, change if using an external camera
+
+if not cap.isOpened():
+    print("Error: Could not open the camera.")
+    exit()
+
+image_counter = 0  # Counter for saved images
+save_path = 'calibration_images/'
+os.makedirs(save_path, exist_ok=True)  # Create directory if it doesn't exist
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Failed to grab frame")
+        break
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Find the chessboard corners (7x5 internal corners for an 8x6 board)
+    ret, corners = cv2.findChessboardCorners(gray, (7, 5), None)
+
+    if ret:
+        # Refine the corners
+        corners2 = cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+        imgpoints.append(corners2)
+        objpoints.append(objp)
+
+        # Draw the corners on the frame
+        cv2.drawChessboardCorners(frame, (7, 5), corners2, ret)
+        
+        # Save the image with detected corners
+        image_name = os.path.join(save_path, f'calib_image_{image_counter}.png')
+        cv2.imwrite(image_name, frame)
+        image_counter += 1
+        print(f"Image saved: {image_name}")
+
+    # Display the frame
+    cv2.imshow('Calibration Frame', frame)
+
+    # Press 'q' to quit or 's' to save the frame
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
+        break
+    elif key == ord('s') and ret:
+        # Save the frame if 's' is pressed and corners were found
+        image_name = os.path.join(save_path, f'calib_image_{image_counter}.png')
+        cv2.imwrite(image_name, frame)
+        image_counter += 1
+        print(f"Image saved: {image_name}")
+
+# Release the camera and close all windows
+cap.release()
+cv2.destroyAllWindows()
+
+# Now perform the calibration using the saved images
+if objpoints and imgpoints:
+    ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
+
+    # Print the calibration results
+    print("Camera matrix:\n", mtx)
+    print("Distortion coefficients:\n", dist)
+    print("Rotation vectors:\n", rvecs)
+    print("Translation vectors:\n", tvecs)
+else:
+    print("Calibration failed: Not enough valid images.")
