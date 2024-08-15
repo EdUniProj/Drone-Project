@@ -1,0 +1,12 @@
+Gaussian Blur : eliminates small isolated pixels eg ;
+red_mask = cv2.GaussianBlur(red_mask, (5, 5), 0)
+
+  Morphological closing : Fills small holes and gaps in detected regions eg;
+red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel)
+
+  Refeined erosion and dialation 
+red_mask = cv2.erode(red_mask, kernel, iterations=1)
+red_mask = cv2.dilate(red_mask, kernel, iterations=2)
+
+
+
