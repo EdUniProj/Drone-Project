@@ -1,13 +1,13 @@
 import cv2
 import numpy as np
 
-# Adjusted HSV color range for red to reduce false positives with skin
+# HSV color range
 lower_red1 = np.array([0, 150, 100], dtype="uint8")
 upper_red1 = np.array([10, 255, 255], dtype="uint8")
 lower_red2 = np.array([170, 150, 100], dtype="uint8")
 upper_red2 = np.array([180, 255, 255], dtype="uint8")
 
-# Open the video capture (change to your camera index or video file path if needed)
+#  video capture 
 cap = cv2.VideoCapture(1)
 
 while True:
@@ -73,7 +73,7 @@ while True:
                 x, y, w, h = cv2.boundingRect(approx)
                 aspect_ratio = float(w) / h
 
-                # Check if the bounding box is roughly square-shaped
+                # Check if the bounding box is  square-shaped
                 if 0.9 < aspect_ratio < 1.1:
                     # Draw the contour and bounding box on the black background
                     cv2.drawContours(black_background_with_red, [approx], -1, (0, 255, 0), 2)
