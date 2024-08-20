@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # Known parameters
-KNOWN_WIDTH = 7.0  # Real width of the red square (e.g., 7 cm)
+KNOWN_WIDTH = 7.0  # Real width
 FOCAL_LENGTH = 800  # Focal length of the camera (in pixels)
 
 # HSV color range for red
@@ -11,7 +11,7 @@ upper_red1 = np.array([10, 255, 255], dtype="uint8")
 lower_red2 = np.array([170, 150, 100], dtype="uint8")
 upper_red2 = np.array([180, 255, 255], dtype="uint8")
 
-# Video capture
+# open camera 
 cap = cv2.VideoCapture(1)
 
 def calculate_distance(focal_length, real_width, width_in_image):
