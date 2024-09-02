@@ -1,0 +1,77 @@
+import math
+
+# Constants
+R = 6371e3  # Earth's radius in meters
+
+def calculate_new_coordinates(lat, lon, distance, yaw):
+    """
+    Calculate new GPS coordinates based on distance and yaw.
+    
+    :param lat: Current latitude in degrees
+    :param lon: Current longitude in degrees
+    :param distance: Distance to the object in meters
+    :param yaw: Yaw angle in degrees (clockwise from North)
+    :return: Tuple of new latitude and longitude
+    """
+    # Convert latitude and longitude to radians
+    lat_rad = math.radians(lat)
+    lon_rad = math.radians(lon)
+    
+    # Convert yaw to radians and distance to angular distance
+    yaw_rad = math.radians(yaw)
+    angular_distance = distance / R
+    
+    # Calculate new latitude
+    new_lat_rad = math.asin(math.sin(lat_rad) * math.cos(angular_distance) +
+                            math.cos(lat_rad) * math.sin(angular_distance) * math.cos(yaw_rad))
+    
+    # Calculate new longitude
+    new_lon_rad = lon_rad + math.atan2(math.sin(yaw_rad) * math.sin(angular_distance) * math.cos(lat_rad),
+                                       math.cos(angular_distance) - math.sin(lat_rad) * math.sin(new_lat_rad))
+    
+    # Convert new latitude and longitude to degrees
+    new_lat = math.degrees(new_lat_rad)
+    new_lon = math.degrees(new_lon_rad)
+    
+    return new_lat, new_lon
+
+def calculate_new_coordinates_with_rangefinder(lat, lon, distance, yaw, rangefinder_distance, pitch=0):
+    """
+    Calculate new GPS coordinates based on distance, yaw, pitch, and rangefinder altitude data.
+    
+    :param lat: Current latitude in degrees
+    :param lon: Current longitude in degrees
+    :param distance: Horizontal distance to the object in meters
+    :param yaw: Yaw angle in degrees (clockwise from North)
+    :param rangefinder_distance: Current altitude from the ground in meters (from rangefinder)
+    :param pitch: Pitch angle in degrees (angle above or below horizontal plane)
+    :return: Tuple of new latitude, longitude, and new altitude
+    """
+    # Adjust the horizontal distance for pitch
+    if pitch != 0:
+        horizontal_distance = distance * math.cos(math.radians(pitch))
+        altitude_change = distance * math.sin(math.radians(pitch))
+    else:
+        horizontal_distance = distance
+        altitude_change = 0
+
+    # Calculate new horizontal coordinates using the previous method
+    new_lat, new_lon = calculate_new_coordinates(lat, lon, horizontal_distance, yaw)
+    
+    # Calculate the new altitude
+    new_altitude = rangefinder_distance + altitude_change  # Add/subtract altitude change
+    
+    return new_lat, new_lon, new_altitude
+
+# Example usage
+current_lat = 51.48  # Example latitude
+current_lon = -3.169 # Example longitude
+horizontal_distance_to_object = 200  # Horizontal distance in meters
+yaw_angle = 18.97  # Yaw angle in degrees
+rangefinder_distance = 20  # Current altitude from the ground in meters (rangefinder data)
+pitch_angle = -5.92  # Pitch angle in degrees (negative for downward)
+
+new_lat, new_lon, new_altitude = calculate_new_coordinates_with_rangefinder(
+    current_lat, current_lon, horizontal_distance_to_object, yaw_angle, rangefinder_distance, pitch_angle)
+
+print(f"New coordinates: Latitude = {new_lat}, Longitude = {new_lon}, Altitude = {new_altitude} meters")
