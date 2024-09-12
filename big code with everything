@@ -1,0 +1,165 @@
+import asyncio
+from mavsdk import System
+import cv2
+import numpy as np
+import math
+
+# Constants
+KNOWN_WIDTH = 7.0  # Real width of the object in centimeters
+FOCAL_LENGTH = 470.7 # Focal length of the camera (in pixels)
+lower_red1 = np.array([0, 150, 100], dtype="uint8")
+upper_red1 = np.array([10, 255, 255], dtype="uint8")
+lower_red2 = np.array([170, 150, 100], dtype="uint8")
+upper_red2 = np.array([180, 255, 255], dtype="uint8")
+
+# Global variables for telemetry
+gps_latitude = 0.0
+gps_longitude = 0.0
+drone_pitch = 0.0
+drone_roll = 0.0
+drone_yaw = 0.0
+is_auto_mode = False
+
+# Camera calibration parameters (adjust these)
+camera_matrix = np.array([[FOCAL_LENGTH, 0, 640], [0, FOCAL_LENGTH, 360], [0, 0, 1]], dtype=np.float32)
+dist_coeffs = np.zeros((4, 1))  # Assuming no lens distortion
+
+async def run():
+    drone = System(mavsdk_server_address='localhost', port=50051)
+    await drone.connect()
+
+    print("Waiting for drone to connect...")
+    async for state in drone.core.connection_state():
+        if state.is_connected:
+            print("Drone connected!")
+            break
+
+    # Start telemetry data collection tasks
+    asyncio.ensure_future(print_position(drone))
+    asyncio.ensure_future(print_attitude(drone))
+
+    # Open USB camera
+    cap = cv2.VideoCapture(0)  # Change video capture number if not working at 0 to 1
+
+    def calculate_distance(focal_length, real_width, width_in_image):
+        """Calculate distance from the camera to the object."""
+        return (real_width * focal_length) / width_in_image
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to grab frame")
+            break
+
+        # Convert the frame to HSV color space
+        hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        # Create masks for the red color
+        mask1 = cv2.inRange(hsv_frame, lower_red1, upper_red1)
+        mask2 = cv2.inRange(hsv_frame, lower_red2, upper_red2)
+        red_mask = cv2.bitwise_or(mask1, mask2)
+
+        # Apply Gaussian and median blur
+        red_mask = cv2.GaussianBlur(red_mask, (7, 7), 0)
+        red_mask = cv2.medianBlur(red_mask, 5)
+
+        # Perform morphological operations
+        kernel = np.ones((5, 5), np.uint8)
+        red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel)
+        red_mask = cv2.erode(red_mask, kernel, iterations=2)
+        red_mask = cv2.dilate(red_mask, kernel, iterations=3)
+
+        # Find contours
+        contours, _ = cv2.findContours(red_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > 500:
+                epsilon = 0.04 * cv2.arcLength(contour, True)
+                approx = cv2.approxPolyDP(contour, epsilon, True)
+
+                if len(approx) == 4:
+                    x, y, w, h = cv2.boundingRect(approx)
+                    aspect_ratio = float(w) / h
+
+                    if 0.9 < aspect_ratio < 1.1:
+                        cv2.drawContours(frame, [approx], -1, (0, 255, 0), 2)
+                        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+                        cv2.putText(frame, "Red Square", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+                        M = cv2.moments(contour)
+                        if M["m00"] != 0:
+                            cx = int(M["m10"] / M["m00"])
+                            cy = int(M["m01"] / M["m00"])
+
+                            cv2.circle(frame, (cx, cy), 5, (255, 255, 0), -1)
+                            cv2.putText(frame, f"Centroid: ({cx}, {cy})", (cx + 10, cy - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+                            distance = calculate_distance(FOCAL_LENGTH, KNOWN_WIDTH, w)
+                            cv2.putText(frame, f"Distance: {distance:.2f} cm", (x, y - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                            print(f"Distance to Red Square: {distance:.2f} cm")
+
+                            # Use solvePnP to get the pose of the red square
+                            object_points = np.array([[0, 0, 0], [KNOWN_WIDTH, 0, 0], [KNOWN_WIDTH, KNOWN_WIDTH, 0], [0, KNOWN_WIDTH, 0]], dtype=np.float32)
+                            image_points = np.array([[cx, cy], [cx + w, cy], [cx + w, cy + h], [cx, cy + h]], dtype=np.float32)
+
+                            _, rotation_vector, translation_vector = cv2.solvePnP(object_points, image_points, camera_matrix, dist_coeffs)
+                            # Use rotation_vector and translation_vector to adjust drone position if necessary
+
+        # Show the processed frame
+        cv2.imshow('Processed Frame', frame)
+
+        # Exit loop when 'q' is pressed
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    # Release the camera and close all windows
+    cap.release()
+    cv2.destroyAllWindows()
+
+async def print_position(drone):
+    global gps_latitude, gps_longitude
+    async for position in drone.telemetry.position():
+        gps_latitude = position.latitude_deg
+        gps_longitude = position.longitude_deg
+        print(f"Latitude: {gps_latitude}, Longitude: {gps_longitude}")
+
+async def print_attitude(drone):
+    global drone_pitch, drone_roll, drone_yaw
+    async for attitude in drone.telemetry.attitude_euler():
+        drone_pitch = attitude.pitch_deg
+        drone_roll = attitude.roll_deg
+        drone_yaw = attitude.yaw_deg
+        print(f"Attitude: Roll: {drone_roll:.2f}, Pitch: {drone_pitch:.2f}, Yaw: {drone_yaw:.2f}")
+
+async def arm_and_takeoff(drone):
+    print("-- Arming")
+    await drone.action.arm()
+    await asyncio.sleep(1)
+    print("-- Taking off")
+    await drone.action.takeoff()
+    await asyncio.sleep(10)
+
+async def auto_mode(drone):
+    await arm_and_takeoff(drone)
+    # Implement auto navigation or search behavior
+
+async def mode_switch():
+    global is_auto_mode
+    while True:
+        mode = input("Enter 'manual' or 'auto': ")
+        if mode == 'auto':
+            is_auto_mode = True
+            print("Switching to auto mode...")
+            await auto_mode(drone)
+        else:
+            is_auto_mode = False
+            print("Switching to manual mode...")
+
+if __name__ == "__main__":
+    drone = System()
+    loop = asyncio.get_event_loop()
+    
+    # Start the main run function, mode switch, and telemetry tasks
+    tasks = [run(), mode_switch()]
+    loop.run_until_complete(asyncio.gather(*tasks))
